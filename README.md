@@ -22,16 +22,16 @@ A voice-based clinical intake agent that conducts a structured pre-visit intervi
 
 ## Tech Stack
 
-| Layer    | Tool                                        |
-|----------|---------------------------------------------|
-| Backend  | FastAPI + uvicorn                           |
-| Agent    | LangGraph (single-node state machine)       |
-| LLM      | GPT-4o (dialogue, extraction, brief gen)    |
-| STT      | OpenAI Whisper-1                            |
-| TTS      | ElevenLabs `eleven_turbo_v2`                |
-| PDF      | ReportLab (server-side)                     |
-| Frontend | React + Vite (plain JSX)                    |
-| Session  | In-memory dict (MemorySaver pattern)        |
+| Layer    | Tool                                     |
+| -------- | ---------------------------------------- |
+| Backend  | FastAPI + uvicorn                        |
+| Agent    | LangGraph (single-node state machine)    |
+| LLM      | GPT-4o (dialogue, extraction, brief gen) |
+| STT      | ElevenLabs `scribe_v1`                   |
+| TTS      | ElevenLabs `eleven_turbo_v2`             |
+| PDF      | ReportLab (server-side)                  |
+| Frontend | React + Vite (plain JSX)                 |
+| Session  | In-memory dict (MemorySaver pattern)     |
 
 ## Getting Started
 
@@ -46,7 +46,7 @@ A voice-based clinical intake agent that conducts a structured pre-visit intervi
 
 ```bash
 # Clone and enter the repo
-git clone <repo-url>
+git clone https://github.com/Krishnapthm/intake
 cd clinical-brief
 
 # Backend environment
@@ -89,7 +89,7 @@ greeting -> cc -> hpi -> ros -> closing -> done
 Each stage has a system prompt, a max turn limit, and a silent extraction prompt:
 
 | Stage    | Max Turns | Extraction Model | Advance Condition                                      |
-|----------|-----------|------------------|--------------------------------------------------------|
+| -------- | --------- | ---------------- | ------------------------------------------------------ |
 | greeting | 2         | —                | Patient says anything                                  |
 | cc       | 5         | CCExtraction     | cc_statement + onset + character + severity present    |
 | hpi      | 10        | HPIExtraction    | Coherent narrative covering onset, character, severity |
