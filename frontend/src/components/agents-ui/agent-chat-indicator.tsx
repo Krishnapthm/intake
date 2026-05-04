@@ -1,0 +1,78 @@
+import { cva } from 'class-variance-authority';
+import type { ComponentProps } from 'react';
+import { motion } from 'motion/react';
+import type { HTMLMotionProps } from 'motion/react';
+
+import { cn } from '@/lib/utils';
+
+const motionAnimationProps = {
+  variants: {
+    hidden: {
+      opacity: 0,
+      scale: 0.1,
+      transition: {
+        duration: 0.1,
+        ease: "linear",
+      },
+    },
+    visible: {
+      opacity: [0.5, 1],
+      scale: [1, 1.2],
+      transition: {
+        type: "spring",
+        bounce: 0,
+        duration: 0.5,
+        repeat: Infinity,
+        repeatType: "mirror",
+      },
+    },
+  },
+  initial: 'hidden',
+  animate: 'visible',
+  exit: 'hidden',
+} satisfies Pick<HTMLMotionProps<'span'>, 'animate' | 'exit' | 'initial' | 'variants'>;
+
+type AgentChatIndicatorProps = Omit<
+  ComponentProps<typeof motion.span>,
+  'animate' | 'exit' | 'initial' | 'transition' | 'variants'
+> & {
+  size?: 'sm' | 'md' | 'lg';
+};
+
+const agentChatIndicatorVariants = cva('bg-muted-foreground inline-block size-2.5 rounded-full', {
+  variants: {
+    size: {
+      sm: 'size-2.5',
+      md: 'size-4',
+      lg: 'size-6',
+    },
+  },
+  defaultVariants: {
+    size: 'md',
+  },
+});
+
+/**
+ * An animated indicator that shows the agent is processing or thinking.
+ * Displays as a pulsing dot, typically used in chat interfaces.
+ *
+ * @extends ComponentProps<'span'>
+ *
+ * @example
+ * ```tsx
+ * {agentState === 'thinking' && <AgentChatIndicator size="md" />}
+ * ```
+ */
+export function AgentChatIndicator({
+  size = 'md',
+  className,
+  ...props
+}: AgentChatIndicatorProps) {
+  return (
+    <motion.span
+      {...motionAnimationProps}
+      transition={{ duration: 0.1, ease: "linear" }}
+      className={cn(agentChatIndicatorVariants({ size }), className)}
+      {...props} />
+  );
+}
