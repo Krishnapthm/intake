@@ -6,7 +6,7 @@ A voice-based clinical intake agent that conducts a structured pre-visit intervi
 
 ## Demo
 
-[Loom walkthrough](https://loom.com/YOUR_LINK_HERE)
+[Loom walkthrough](https://www.loom.com/share/ab115b4e9f2e4ea08caf9398bf39d97e)
 
 ## Features
 
@@ -27,7 +27,7 @@ A voice-based clinical intake agent that conducts a structured pre-visit intervi
 | Backend  | FastAPI + uvicorn                        |
 | Agent    | LangGraph (single-node state machine)    |
 | LLM      | GPT-4o (dialogue, extraction, brief gen) |
-| STT      | ElevenLabs `scribe_v1`                   |
+| STT      | ElevenLabs `scribe_v2`                   |
 | TTS      | ElevenLabs `eleven_turbo_v2`             |
 | PDF      | ReportLab (server-side)                  |
 | Frontend | React + Vite (plain JSX)                 |
@@ -47,7 +47,7 @@ A voice-based clinical intake agent that conducts a structured pre-visit intervi
 ```bash
 # Clone and enter the repo
 git clone https://github.com/Krishnapthm/intake
-cd clinical-brief
+cd intake
 
 # Backend environment
 cp .env.example .env
@@ -118,14 +118,6 @@ The brief is available as JSON via `GET /session/{id}/brief` and as a formatted 
 
 - **In-memory session state.** `_sessions` is a plain dict on the FastAPI process. This is fine for a single demo session but does not survive restarts and will not scale horizontally. The LangGraph `MemorySaver` pattern is a clean swap point for `SqliteSaver` or Redis.
 
-- **Whisper-1 for STT, not ElevenLabs Scribe.** The original design specified ElevenLabs Scribe v1 but Whisper-1 was used. Whisper-1 accepts `audio/webm` natively from MediaRecorder, requires no extra setup, and performs well enough for this use case. Scribe v1 would reduce vendor count.
+- **ElevenLabs Scribe v2 for STT.** Transcription runs through ElevenLabs `scribe_v2`, keeping STT and TTS on the same vendor and reducing the number of API keys required.
 
 - **Hard turn caps as a fallback, not primary logic.** The primary advance condition is structured extraction completeness. Turn caps exist to guarantee termination when the patient is evasive or the extraction is too conservative. In practice, the caps are generous enough that they rarely fire on a cooperative patient.
-
-## What I Would Improve with More Time
-
-- **Streaming audio response.** ElevenLabs has a streaming endpoint; the current implementation buffers the full MP3 before sending. Switching to chunked streaming would cut perceived latency by 1–2 seconds per turn.
-
-- **Richer extraction with confidence scoring.** The current extraction models use a binary `is_complete` flag. A confidence score or a list of missing required fields would let the agent ask more targeted follow-up questions rather than relying on the dialogue prompt to figure out what is still needed.
-
-- **Persistent sessions with a real database.** In-memory state means the brief is lost on server restart. Replacing the `_sessions` dict with `SqliteSaver` (or Postgres for multi-tenant use) would make sessions durable and enable retrieval by a clinician before the appointment.
