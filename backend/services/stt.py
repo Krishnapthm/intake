@@ -1,16 +1,11 @@
-import io
+from elevenlabs.client import AsyncElevenLabs
 
-from openai import AsyncOpenAI
-
-_client = AsyncOpenAI()
+_client = AsyncElevenLabs()
 
 
-async def transcribe(audio_bytes: bytes, filename: str = "audio.webm") -> str:
-    buf = io.BytesIO(audio_bytes)
-    buf.name = filename
-    response = await _client.audio.transcriptions.create(
-        model="whisper-1",
-        file=buf,
-        response_format="text",
+async def transcribe(audio_bytes: bytes) -> str:
+    response = await _client.speech_to_text.convert(
+        audio=audio_bytes,
+        model_id="scribe_v2",
     )
-    return response.strip()
+    return response.text.strip()
