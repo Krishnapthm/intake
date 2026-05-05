@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IntakeBrief } from "./components/IntakeBrief";
 import { ConversationView } from "./components/ConversationView";
 import { StageIndicator } from "./components/StageIndicator";
@@ -31,6 +31,7 @@ export default function App() {
   const [sessionId] = useState(generateSessionId);
   const [started, setStarted] = useState(false);
   const [muted, setMuted] = useState(false);
+  const isAgentSpeakingRef = useRef(false);
 
   const {
     transcript,
@@ -48,12 +49,19 @@ export default function App() {
   } =
     useIntakeSocket(started ? sessionId : null);
 
-  // Scribe listens only while the session is live and the agent is not speaking.
-  const transcriptionEnabled = started && isConnected && !isAgentSpeaking && !isComplete && !muted && !isStopped;
+  // Keep Scribe connected the entire session; gate sending on the agent not speaking
+  // so echo-cancelled mic noise during TTS playback is silently dropped.
+  const transcriptionEnabled = started && isConnected && !isComplete && !muted && !isStopped;
+
+  useEffect(() => { isAgentSpeakingRef.current = isAgentSpeaking; }, [isAgentSpeaking]);
+
+  const handleTranscriptReady = useCallback((text: string) => {
+    if (!isAgentSpeakingRef.current) sendTranscript(text);
+  }, [sendTranscript]);
 
   const { isListening, isSpeaking, partialTranscript, error: transcriptionError } = useScribeTranscription({
     enabled: transcriptionEnabled,
-    onTranscriptReady: sendTranscript,
+    onTranscriptReady: handleTranscriptReady,
   });
 
   const handleStop = useCallback(() => {

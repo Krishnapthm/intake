@@ -21,17 +21,23 @@ async function fetchScribeToken(): Promise<string> {
   if (!response.ok) {
     throw new Error("Failed to create Scribe token");
   }
-  const data = await response.json() as ScribeTokenResponse;
+  const data = (await response.json()) as ScribeTokenResponse;
   return data.token;
 }
 
-export function useScribeTranscription({ enabled, onTranscriptReady }: UseScribeTranscriptionOptions) {
+export function useScribeTranscription({
+  enabled,
+  onTranscriptReady,
+}: UseScribeTranscriptionOptions) {
   const connectingRef = useRef(false);
 
-  const handleCommittedTranscript = useCallback((data: ScribeTranscript) => {
-    const text = data.text.trim();
-    if (text) onTranscriptReady(text);
-  }, [onTranscriptReady]);
+  const handleCommittedTranscript = useCallback(
+    (data: ScribeTranscript) => {
+      const text = data.text.trim();
+      if (text) onTranscriptReady(text);
+    },
+    [onTranscriptReady],
+  );
 
   const handleError = useCallback((error: unknown) => {
     console.error("[Scribe]", error);
@@ -40,7 +46,7 @@ export function useScribeTranscription({ enabled, onTranscriptReady }: UseScribe
   const scribe = useScribe({
     modelId: "scribe_v2_realtime",
     commitStrategy: CommitStrategy.VAD,
-    vadSilenceThresholdSecs: 0.8,
+    vadSilenceThresholdSecs: 2,
     vadThreshold: 0.35,
     minSpeechDurationMs: 100,
     minSilenceDurationMs: 500,
@@ -49,7 +55,14 @@ export function useScribeTranscription({ enabled, onTranscriptReady }: UseScribe
     onError: handleError,
   });
 
-  const { connect: connectScribe, disconnect, error, isConnected, partialTranscript, status } = scribe;
+  const {
+    connect: connectScribe,
+    disconnect,
+    error,
+    isConnected,
+    partialTranscript,
+    status,
+  } = scribe;
 
   useEffect(() => {
     if (!enabled) {
@@ -60,7 +73,12 @@ export function useScribeTranscription({ enabled, onTranscriptReady }: UseScribe
       return;
     }
 
-    if (isConnected || status === "connecting" || status === "error" || connectingRef.current) {
+    if (
+      isConnected ||
+      status === "connecting" ||
+      status === "error" ||
+      connectingRef.current
+    ) {
       return;
     }
 
