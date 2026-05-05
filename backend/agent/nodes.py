@@ -1,9 +1,9 @@
-from openai import AsyncOpenAI
+from langchain_openai import ChatOpenAI
 from . import prompts
 from .state import IntakeState
 from models import CCExtraction, HPIExtraction, ROSExtraction
 
-_client = AsyncOpenAI()
+llm = ChatOpenAI(model="gpt-5.4-2026-03-05", reasoning_effort="none")
 
 STAGE_MAX_TURNS = {
     "greeting": 2,
@@ -49,18 +49,13 @@ async def _check_stage_complete(stage: str, messages: list[dict]) -> tuple[bool,
     if not extraction_prompt or not model_cls:
         return False, {}
 
-    response = await _client.beta.chat.completions.parse(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": extraction_prompt},
-            *messages,
-            {"role": "user", "content": "Extract the data and assess completeness based on the conversation so far."},
-        ],
-        response_format=model_cls,
-        max_tokens=400,
-    )
+    structured_llm = llm.bind(max_tokens=400).with_structured_output(model_cls)
+    result = await structured_llm.ainvoke([
+        {"role": "system", "content": extraction_prompt},
+        *messages,
+        {"role": "user", "content": "Extract the data and assess completeness based on the conversation so far."},
+    ])
 
-    result = response.choices[0].message.parsed
     if result is None:
         return False, {}
 
@@ -82,14 +77,10 @@ async def process_turn(state: dict) -> dict:
 
     system_prompt = STAGE_PROMPTS.get(stage, prompts.GREETING)
 
-    # Main dialogue call — what the agent says to the user
-    response = await _client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "system", "content": system_prompt}] + messages_for_llm,
-        max_tokens=150,  # Keep responses concise for TTS
+    response = await llm.bind(max_tokens=150).ainvoke(
+        [{"role": "system", "content": system_prompt}] + messages_for_llm
     )
-
-    agent_text = (response.choices[0].message.content or "").strip()
+    agent_text = (response.content or "").strip()
 
     # Determine if stage should advance
     should_advance = False
@@ -99,7 +90,9 @@ async def process_turn(state: dict) -> dict:
 
     # Check stage completion after user responds (not on greeting's first turn)
     if pending_user_msg and stage in EXTRACTION_PROMPTS:
-        should_advance, extracted_data = await _check_stage_complete(stage, messages_for_llm)
+        should_advance, extracted_data = await _check_stage_complete(
+            stage, messages_for_llm
+        )
 
     # Hard cap: force advance if max turns reached
     if new_turns >= STAGE_MAX_TURNS.get(stage, 1):
