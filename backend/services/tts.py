@@ -13,7 +13,7 @@ def _synthesize_blocking(text: str) -> str:
         _client.text_to_speech.convert(
             voice_id=VOICE_ID,
             text=text,
-            model_id="eleven_turbo_v2",
+            model_id="eleven_v3",
             output_format="mp3_44100_128",
         )
     )
