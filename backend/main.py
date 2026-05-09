@@ -18,13 +18,12 @@ from reportlab.lib.units import inch
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, HRFlowable
 from reportlab.lib import colors
 
+import db
 from agent.graph import intake_graph
 from services.brief_generator import generate_brief
+from services.fhir_mapper import brief_to_fhir_bundle
 from services.stt import transcribe
 from services.tts import synthesize
-
-_sessions: dict[str, dict] = {}
-_pdfs: dict[str, bytes] = {}
 
 
 def _init_session(session_id: str) -> dict:
@@ -45,7 +44,9 @@ def _init_session(session_id: str) -> dict:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await db.init()
     yield
+    await db.close()
 
 
 app = FastAPI(title="Clinical Intake API", lifespan=lifespan)
@@ -107,14 +108,14 @@ async def get_scribe_token():
 async def intake_websocket(websocket: WebSocket, session_id: str):
     await websocket.accept()
 
-    session = _sessions.get(session_id)
+    session = await db.load_session(session_id)
     if not session:
         session = _init_session(session_id)
-        _sessions[session_id] = session
+        await db.save_session(session_id, session)
 
     # Send initial greeting before waiting for user audio
     result = await intake_graph.ainvoke(session)
-    _sessions[session_id] = result
+    await db.save_session(session_id, result)
     session = result
 
     agent_text = result.get("agent_response", "")
@@ -146,7 +147,7 @@ async def intake_websocket(websocket: WebSocket, session_id: str):
                 continue
 
             result, payload = await _advance_session(session, transcript)
-            _sessions[session_id] = result
+            await db.save_session(session_id, result)
             session = result
 
             await websocket.send_json(payload)
@@ -154,10 +155,12 @@ async def intake_websocket(websocket: WebSocket, session_id: str):
             if payload["is_complete"] and not result.get("brief"):
                 brief = await generate_brief(session_id, result.get("messages", []))
                 brief_dict = brief.model_dump(mode="json")
-                _pdfs[session_id] = _build_pdf(session_id, brief_dict)
+                pdf_bytes = _build_pdf(session_id, brief_dict)
                 result["brief"] = brief_dict
                 result["pdf_ready"] = True
-                _sessions[session_id] = result
+                await db.save_session(session_id, result)
+                await db.save_pdf(session_id, pdf_bytes)
+                session = result
 
                 await websocket.send_json({
                     "transcript": "",
@@ -174,13 +177,54 @@ async def intake_websocket(websocket: WebSocket, session_id: str):
 
 @app.get("/session/{session_id}/brief")
 async def get_brief(session_id: str):
-    session = _sessions.get(session_id)
+    session = await db.load_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+    pdf_bytes = await db.load_pdf(session_id)
     return {
         **session,
-        "pdf_ready": session_id in _pdfs or bool(session.get("pdf_ready")),
+        "pdf_ready": pdf_bytes is not None or bool(session.get("pdf_ready")),
     }
+
+
+@app.get("/session/{session_id}/brief/pdf")
+async def download_brief_pdf(session_id: str):
+    session = await db.load_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    brief = session.get("brief")
+    if not brief:
+        raise HTTPException(status_code=404, detail="Brief not yet generated for this session")
+
+    pdf_bytes = await db.load_pdf(session_id)
+    if pdf_bytes is None:
+        brief_dict = brief if isinstance(brief, dict) else brief.model_dump(mode="json")
+        pdf_bytes = _build_pdf(session_id, brief_dict)
+        await db.save_pdf(session_id, pdf_bytes)
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="intake-{session_id}.pdf"'},
+    )
+
+
+@app.get("/session/{session_id}/brief/fhir")
+async def download_brief_fhir(session_id: str):
+    session = await db.load_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    brief = session.get("brief")
+    if not brief:
+        raise HTTPException(status_code=404, detail="Brief not yet generated for this session")
+
+    bundle = brief_to_fhir_bundle(session_id, brief)
+    return Response(
+        content=json.dumps(bundle),
+        media_type="application/fhir+json",
+    )
 
 
 def _build_pdf(session_id: str, brief: dict) -> bytes:
@@ -252,27 +296,3 @@ def _build_pdf(session_id: str, brief: dict) -> bytes:
 
     doc.build(story)
     return buf.getvalue()
-
-
-@app.get("/session/{session_id}/brief/pdf")
-async def download_brief_pdf(session_id: str):
-    session = _sessions.get(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    brief = session.get("brief")
-    if not brief:
-        raise HTTPException(status_code=404, detail="Brief not yet generated for this session")
-
-    pdf_bytes = _pdfs.get(session_id)
-    if pdf_bytes is None:
-        brief_dict = brief if isinstance(brief, dict) else brief.model_dump(mode="json")
-        pdf_bytes = _build_pdf(session_id, brief_dict)
-        _pdfs[session_id] = pdf_bytes
-        session["pdf_ready"] = True
-
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="intake-{session_id}.pdf"'},
-    )
