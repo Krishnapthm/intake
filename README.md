@@ -16,65 +16,88 @@ A voice-based clinical intake agent that conducts a structured pre-visit intervi
 - Each stage has a dedicated system prompt and per-turn structured extraction running silently alongside the dialogue
 - Stages advance on completeness (structured LLM check), not just turn count; hard cap is a fallback
 - Agent responses capped at 150 tokens and 2 sentences to minimize TTS latency
-- Structured clinical brief generated at session end via a separate GPT-5.4 call in JSON mode
+- Structured clinical brief generated at session end via a separate GPT-4o call in JSON mode
 - Server-side PDF export (ReportLab) with clinical section formatting
 - Live transcript panel and stage progress indicator in the UI
 
 ## Tech Stack
 
-| Layer    | Tool                                     |
-| -------- | ---------------------------------------- |
-| Backend  | FastAPI + uvicorn                        |
-| Agent    | LangGraph (single-node state machine)    |
-| LLM      | GPT-5.4 (dialogue, extraction, brief gen) |
-| STT      | ElevenLabs `scribe_v2`                   |
-| TTS      | ElevenLabs `eleven_turbo_v2`             |
-| PDF      | ReportLab (server-side)                  |
-| Frontend | React + Vite (plain JSX)                 |
-| Session  | In-memory dict (MemorySaver pattern)     |
+| Layer    | Tool                                                            |
+| -------- | --------------------------------------------------------------- |
+| Backend  | FastAPI + uvicorn                                               |
+| Agent    | LangGraph (single-node state machine)                           |
+| LLM      | GPT-4o (dialogue, extraction, brief gen)                        |
+| STT      | ElevenLabs `scribe_v2`                                          |
+| TTS      | ElevenLabs `eleven_turbo_v2`                                    |
+| PDF      | ReportLab (server-side)                                         |
+| Frontend | React + Vite (plain JSX)                                        |
+| Session  | PostgreSQL via asyncpg — session state + LangGraph checkpointer |
 
 ## Getting Started
 
 ### Prerequisites
 
-- Python 3.12 with `uv` installed
-- Node.js 18+
+- Docker + Docker Compose **or** Python 3.12 with `uv` and Node.js 18+
 - OpenAI API key
 - ElevenLabs API key and a Voice ID
 
-### Setup
+### Clone
 
 ```bash
-# Clone and enter the repo
 git clone https://github.com/Krishnapthm/intake
 cd intake
-
-# Backend environment
-cp .env.example .env
-# Fill in: OPENAI_API_KEY, ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID
-
-# Frontend environment
-cp frontend/.env.example frontend/.env
-# Defaults (ws://localhost:8000, http://localhost:8000) work for local dev
-
-# Install backend deps
-cd backend
-uv sync
-
-# Install frontend deps
-cd ../frontend
-npm install
 ```
 
-### Running
+### Environment setup
+
+```bash
+# Root env — fill in OPENAI_API_KEY, ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID
+cp .env.example .env
+
+# Frontend env — defaults work for local dev (ws://localhost:8000, http://localhost:8000)
+cp frontend/.env.example frontend/.env
+```
+
+### Option A — Docker Compose (recommended)
+
+PostgreSQL is included in the default stack; it stores session state and serves as the LangGraph checkpointer so sessions survive backend restarts.
+
+```bash
+# First run — builds backend and frontend images, starts postgres
+docker compose up --build
+
+# Subsequent runs (images already built)
+docker compose up
+
+# Live reload while editing — syncs source into running containers
+docker compose watch
+```
+
+Open `http://localhost:5173`.
+
+#### FHIR integration testing (optional)
+
+Starts OpenEMR as a local FHIR R4 target. First boot takes ~2 minutes while OpenEMR initialises its database.
+
+```bash
+docker compose --profile testing up
+```
+
+OpenEMR UI: `http://localhost` (admin / pass). FHIR base: `http://localhost/apis/default/fhir`.
+
+### Option B — Local dev (no Docker)
+
+Requires a running PostgreSQL instance. Set `DATABASE_URL` in `.env` to point at it.
 
 ```bash
 # Terminal 1 — backend
 cd backend
+uv sync
 uv run uvicorn main:app --reload --port 8000
 
 # Terminal 2 — frontend
 cd frontend
+npm install
 npm run dev
 ```
 
@@ -116,7 +139,7 @@ The brief is available as JSON via `GET /session/{id}/brief` and as a formatted 
 
 - **No VAD on the backend.** The frontend uses the Web Audio API for voice activity detection and sends a single audio blob per utterance. This simplifies the server (stateless audio handler) but makes the system sensitive to browser MediaRecorder behavior and network drops. A production system would use a server-side VAD or streaming Whisper.
 
-- **In-memory session state.** `_sessions` is a plain dict on the FastAPI process. This is fine for a single demo session but does not survive restarts and will not scale horizontally. The LangGraph `MemorySaver` pattern is a clean swap point for `SqliteSaver` or Redis.
+- **PostgreSQL for session state.** Sessions are persisted via `asyncpg` to a `sessions` table (JSONB state + BYTEA pdf). PostgreSQL is also the backing store for the LangGraph checkpointer, so sessions survive backend restarts. The compose `db` service is intentionally minimal — it is a dev convenience, not a production-grade deployment.
 
 - **ElevenLabs Scribe v2 for STT.** Transcription runs through ElevenLabs `scribe_v2`, keeping STT and TTS on the same vendor and reducing the number of API keys required.
 
