@@ -1,0 +1,101 @@
+services:
+  db:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: intake
+      POSTGRES_USER: intake
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-intake}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "intake", "-d", "intake"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://intake:${POSTGRES_PASSWORD:-intake}@db:5432/intake
+      CORS_ORIGINS: http://localhost:5173
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - backend-venv:/app/.venv
+    develop:
+      watch:
+        - action: sync
+          path: ./backend
+          target: /app
+
+  frontend:
+    build: ./frontend
+    env_file: frontend/.env
+    environment:
+      VITE_WS_URL: ws://localhost:8000
+      VITE_API_URL: http://localhost:8000
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+    develop:
+      watch:
+        - action: sync
+          path: ./frontend/src
+          target: /app/src
+
+  # OpenEMR FHIR test target — start with: docker compose --profile testing up
+  openemr-db:
+    image: mariadb:10.11
+    profiles: [testing]
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: openemr
+      MYSQL_PASSWORD: openemr
+      MYSQL_DATABASE: openemr
+    volumes:
+      - oemrdata:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  openemr:
+    image: openemr/openemr
+    profiles: [testing]
+    depends_on:
+      openemr-db:
+        condition: service_healthy
+    environment:
+      MYSQL_HOST: openemr-db
+      MYSQL_ROOT_PASS: root
+      MYSQL_USER: openemr
+      MYSQL_PASS: openemr
+      OE_USER: admin
+      OE_PASS: pass
+    ports:
+      - "80:80"
+    volumes:
+      - openemr-sites:/var/www/localhost/htdocs/openemr/sites
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+
+volumes:
+  pgdata:
+  backend-venv:
+  frontend-node-modules:
+  oemrdata:
+  openemr-sites:
