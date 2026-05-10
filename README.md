@@ -16,7 +16,7 @@ A voice-based clinical intake agent that conducts a structured pre-visit intervi
 - Each stage has a dedicated system prompt and per-turn structured extraction running silently alongside the dialogue
 - Stages advance on completeness (structured LLM check), not just turn count; hard cap is a fallback
 - Agent responses capped at 150 tokens and 2 sentences to minimize TTS latency
-- Structured clinical brief generated at session end via a separate GPT-4o call in JSON mode
+- Structured clinical brief generated at session end via a separate GPT-5.4 call in JSON mode
 - Server-side PDF export (ReportLab) with clinical section formatting
 - Live transcript panel and stage progress indicator in the UI
 
@@ -26,7 +26,7 @@ A voice-based clinical intake agent that conducts a structured pre-visit intervi
 | -------- | --------------------------------------------------------------- |
 | Backend  | FastAPI + uvicorn                                               |
 | Agent    | LangGraph (single-node state machine)                           |
-| LLM      | GPT-4o (dialogue, extraction, brief gen)                        |
+| LLM      | GPT-5.4 (dialogue, extraction, brief gen)                       |
 | STT      | ElevenLabs `scribe_v2`                                          |
 | TTS      | ElevenLabs `eleven_turbo_v2`                                    |
 | PDF      | ReportLab (server-side)                                         |
