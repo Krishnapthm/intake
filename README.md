@@ -37,7 +37,7 @@ A voice-based clinical intake agent that conducts a structured pre-visit intervi
 
 ### Prerequisites
 
-- Docker + Docker Compose **or** Python 3.12 with `uv` and Node.js 18+
+- Python 3.12 with `uv` and Node.js 18+
 - OpenAI API key
 - ElevenLabs API key and a Voice ID
 
@@ -58,36 +58,7 @@ cp .env.example .env
 cp frontend/.env.example frontend/.env
 ```
 
-### Option A — Docker Compose (recommended)
-
-PostgreSQL is included in the default stack; it stores session state and serves as the LangGraph checkpointer so sessions survive backend restarts.
-
-```bash
-# First run — builds backend and frontend images, starts postgres
-docker compose up --build
-
-# Subsequent runs (images already built)
-docker compose up
-
-# Live reload while editing — syncs source into running containers
-docker compose watch
-```
-
-Open `http://localhost:5173`.
-
-#### FHIR integration testing (optional)
-
-Starts OpenEMR as a local FHIR R4 target. First boot takes ~2 minutes while OpenEMR initialises its database.
-
-```bash
-docker compose --profile testing up
-```
-
-OpenEMR UI: `http://localhost` (admin / pass). FHIR base: `http://localhost/apis/default/fhir`.
-
-### Option B — Local dev (no Docker)
-
-Requires a running PostgreSQL instance. Set `DATABASE_URL` in `.env` to point at it.
+### Local dev (recommended)
 
 ```bash
 # Terminal 1 — backend
@@ -102,6 +73,18 @@ npm run dev
 ```
 
 Open `http://localhost:5173`, click the visualizer to begin.
+
+### Docker Compose
+
+```bash
+# First run — builds backend and frontend images, starts postgres
+docker compose up --build
+
+# Subsequent runs (images already built)
+docker compose up
+```
+
+Open `http://localhost:5173`.
 
 ## Conversation Flow
 
