@@ -10,7 +10,10 @@ import { useScribeTranscription } from "./hooks/useScribeTranscription";
 import type { VisualizerState } from "./types/intake";
 
 function generateSessionId() {
-  return crypto.randomUUID();
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
 
 const STATUS_LABELS = {
